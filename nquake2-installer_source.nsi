@@ -1,16 +1,15 @@
 ;nQuake2 NSIS Online Installer Script
-;By Empezar 2012-12-09; Last modified 2013-09-14
+;By Empezar 2012-12-09; Last modified 2013-10-11
 
-!define VERSION "1.1"
-!define SHORTVERSION "11"
+!define VERSION "1.2"
+!define SHORTVERSION "12"
 
 Name "nQuake2"
 OutFile "nquake2v${SHORTVERSION}_installer.exe"
 InstallDir "C:\nQuake2"
 
-!define NQUAKE2_URL "http://nquake2.sourceforge.net" # Note: no trailing slash! - for nquake2.ini downloading
-!define INSTALLER_URL "http://nquake2.com" # Note: no trailing slash! - for visiting nQuake2 website
-!define DISTFILES_PATH "C:\nquake2-distfiles" # Note: no trailing slash!
+!define INSTALLER_URL "http://nquake2.com" # Note: no trailing slash!
+!define DISTFILES_PATH "$LOCALAPPDATA\nQuake2\" # Note: no trailing slash!
 
 # Editing anything below this line is not recommended
 ;---------------------------------------------------
@@ -36,6 +35,9 @@ InstallDirRegKey HKCU "Software\nQuake2" "Install_Dir"
 ;----------------------------------------------------
 ;Variables
 
+Var ADDON_CTF
+Var ADDON_ERASER
+Var ADDON_TEXTURES
 Var CONFIG_NAME
 Var CONFIG_INVERT
 Var CONFIG_FORWARD
@@ -68,7 +70,6 @@ Var REMOVE_MODIFIED_FILES
 Var RETRIES
 Var SIZE
 Var STARTMENU_FOLDER
-#TEXTURESVar TEXTURES
 
 ;----------------------------------------------------
 ;Interface Settings
@@ -95,16 +96,15 @@ LicenseForceSelection checkbox "I agree to these terms and conditions"
 
 Page custom FULLVERSION
 
-Page custom DISTFILEFOLDER
-
-Page custom MIRRORSELECT
+Page custom DOWNLOAD
 
 Page custom CONFIG
 
-#TEXTURESPage custom TEXTURES
+Page custom ADDONS
 
 !define MUI_PAGE_CUSTOMFUNCTION_PRE UpdateInstallSize
 DirText "Setup will install nQuake2 in the following folder. To install in a different folder, click Browse and select another folder. Click Next to continue.$\r$\n$\r$\nIt is NOT ADVISABLE to install in the Program Files folder." "Destination Folder" "Browse" "Select the folder to install nQuake2 in:"
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW DirectoryPageShow
 !insertmacro MUI_PAGE_DIRECTORY
 
 !insertmacro MUI_PAGE_STARTMENU "Application" $STARTMENU_FOLDER
@@ -147,9 +147,8 @@ LangString ^SpaceRequired ${LANG_ENGLISH} "Download size: "
 
 ReserveFile "config.ini"
 ReserveFile "fullversion.ini"
-ReserveFile "distfilefolder.ini"
-ReserveFile "mirrorselect.ini"
-#TEXTURESReserveFile "textures.ini"
+ReserveFile "download.ini"
+ReserveFile "addons.ini"
 ReserveFile "errors.ini"
 ReserveFile "uninstall.ini"
 
@@ -166,9 +165,9 @@ Section "" # Prepare installation
   RealProgress::SetProgress /NOUNLOAD 0
 
   # Read information from custom pages
-  !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_PATH "distfilefolder.ini" "Field 3" "State"
-  !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_UPDATE "distfilefolder.ini" "Field 4" "State"
-  !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_DELETE "distfilefolder.ini" "Field 5" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_PATH "download.ini" "Field 3" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_UPDATE "download.ini" "Field 4" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_DELETE "download.ini" "Field 5" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $PAK_LOCATION "fullversion.ini" "Field 3" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $CONFIG_NAME "config.ini" "Field 4" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $CONFIG_INVERT "config.ini" "Field 6" "State"
@@ -178,7 +177,9 @@ Section "" # Prepare installation
   !insertmacro MUI_INSTALLOPTIONS_READ $CONFIG_MOVERIGHT "config.ini" "Field 15" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $CONFIG_JUMP "config.ini" "Field 17" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $CONFIG_DUCK "config.ini" "Field 19" "State"
-  #TEXTURES!insertmacro MUI_INSTALLOPTIONS_READ $TEXTURES "textures.ini" "Field 2" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $ADDON_CTF "addons.ini" "Field 3" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $ADDON_ERASER "addons.ini" "Field 4" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $ADDON_TEXTURES "addons.ini" "Field 6" "State"
 
   # Create distfiles folder if it doesn't already exist
   ${Unless} ${FileExists} "$DISTFILES_PATH\*.*"
@@ -200,13 +201,10 @@ Section "" # Prepare installation
   IntOp $INSTSIZE $INSTSIZE + $0
   ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-non-gpl.zip"
   IntOp $INSTSIZE $INSTSIZE + $0
-  #TEXTURES${If} $TEXTURES == 1
-  #TEXTURES  ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-textures.zip"
-  #TEXTURES  IntOp $INSTSIZE $INSTSIZE + $0
-  #TEXTURES${EndIf}
+  ###
 
   # Find out what mirror was selected
-  !insertmacro MUI_INSTALLOPTIONS_READ $R0 "mirrorselect.ini" "Field 3" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $R0 "download.ini" "Field 7" "State"
   ${If} $R0 == "Randomly selected mirror (Recommended)"
     # Get amount of mirrors ($0 = amount of mirrors)
     StrCpy $0 1
@@ -342,10 +340,6 @@ Section "nQuake2" NQUAKE2
 
   # Download and install non-GPL files
   !insertmacro InstallSection nquake2-non-gpl.zip "nQuake2 game files (2 of 2)"
-  # Copy CTF pak0.pak to Eraser folder
-  CopyFiles "$INSTDIR\ctf\pak0.pak" "$INSTDIR\eraser\ctf.pak"
-  # Add CTF pak0.pak to install.log
-  FileWrite $INSTLOG "eraser\ctf.pak$\r$\n"
   # Add to installed size
   ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-non-gpl.zip"
   IntOp $INSTALLED $INSTALLED + $0
@@ -354,22 +348,45 @@ Section "nQuake2" NQUAKE2
   IntOp $0 $0 / $INSTSIZE
   RealProgress::SetProgress /NOUNLOAD $0
 
-  #TEXTURES# Download and install texture files
-  #TEXTURES${If} $TEXTURES == 1
-  #TEXTURES  !insertmacro InstallSection nquake2-textures.zip "high resolution textures"
-  #TEXTURES  # Add to installed size
-  #TEXTURES  ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-textures.zip"
-  #TEXTURES  IntOp $INSTALLED $INSTALLED + $0
-  #TEXTURES  # Set progress bar
-  #TEXTURES  IntOp $0 $INSTALLED * 100
-  #TEXTURES  IntOp $0 $0 / $INSTSIZE
-  #TEXTURES  RealProgress::SetProgress /NOUNLOAD $0
-  #TEXTURES  # Add a line about the textures pak file in baseq2\readme.txt
-  #TEXTURES  FileOpen $BASEQ2README "$INSTDIR\baseq2\readme.txt" a
-  #TEXTURES    FileSeek $BASEQ2README 0 END
-  #TEXTURES    FileWrite $BASEQ2README "$\r$\nThe file $\"textures.pkz$\" contains the nQuake2 texture files. It can also be opened using WinRAR.$\r$\n"
-  #TEXTURES  FileClose $BASEQ2README
-  #TEXTURES${EndIf}
+  # Download and install CTF modification
+  ${If} $ADDON_CTF == 1
+    !insertmacro InstallSection nquake2-addon-ctf.zip "Capture The Flag"
+    # Add to installed size
+    ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-addon-ctf.zip"
+    IntOp $INSTALLED $INSTALLED + $0
+    # Set progress bar
+    IntOp $0 $INSTALLED * 100
+    IntOp $0 $0 / $INSTSIZE
+    RealProgress::SetProgress /NOUNLOAD $0
+  ${EndIf}
+
+  # Download and install Eraser bot
+  ${If} $ADDON_ERASER == 1
+    !insertmacro InstallSection nquake2-addon-eraser.zip "Eraser Bot"
+    # Add to installed size
+    ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-addon-eraser.zip"
+    IntOp $INSTALLED $INSTALLED + $0
+    # Set progress bar
+    IntOp $0 $INSTALLED * 100
+    IntOp $0 $0 / $INSTSIZE
+    RealProgress::SetProgress /NOUNLOAD $0
+    # Copy CTF pak0.pak to Eraser folder
+    CopyFiles "$INSTDIR\ctf\pak0.pak" "$INSTDIR\eraser\ctf.pak"
+    # Add CTF pak0.pak to install.log
+    FileWrite $INSTLOG "eraser\ctf.pak$\r$\n"
+  ${EndIf}
+
+  # Download and install high resolution textures
+  ${If} $ADDON_TEXTURES == 1
+    !insertmacro InstallSection nquake2-addon-textures.zip "High resolution textures"
+    # Add to installed size
+    ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-addon-textures.zip"
+    IntOp $INSTALLED $INSTALLED + $0
+    # Set progress bar
+    IntOp $0 $INSTALLED * 100
+    IntOp $0 $0 / $INSTSIZE
+    RealProgress::SetProgress /NOUNLOAD $0
+  ${EndIf}
 
   # Copy pak0.pak if it can be found alongside the installer executable
   ${If} ${FileExists} "$EXEDIR\pak0.pak"
@@ -721,32 +738,24 @@ Function FULLVERSION
 
 FunctionEnd
 
-Function DISTFILEFOLDER
+Function DOWNLOAD
 
-  !insertmacro MUI_INSTALLOPTIONS_EXTRACT "distfilefolder.ini"
+  !insertmacro MUI_INSTALLOPTIONS_EXTRACT "download.ini"
   # Change the text on the distfile folder page if the installer is in offline mode
   ${If} $OFFLINE == 1
-    !insertmacro MUI_HEADER_TEXT "Distribution Files" "Select where the distribution files are located."
-    !insertmacro MUI_INSTALLOPTIONS_WRITE "distfilefolder.ini" "Field 1" "Text" "Setup will use the distribution files (used to install nQuake2) located in the following folder. To use a different folder, click Browse and select another folder. Click Next to continue."
-    !insertmacro MUI_INSTALLOPTIONS_WRITE "distfilefolder.ini" "Field 4" "Type" ""
-    !insertmacro MUI_INSTALLOPTIONS_WRITE "distfilefolder.ini" "Field 4" "State" "0"
-    !insertmacro MUI_INSTALLOPTIONS_WRITE "distfilefolder.ini" "Field 5" "Type" ""
-    !insertmacro MUI_INSTALLOPTIONS_WRITE "distfilefolder.ini" "Field 5" "State" "0"
+    !insertmacro MUI_HEADER_TEXT "Setup Files" "Select where the setup files are located."
+    !insertmacro MUI_INSTALLOPTIONS_WRITE "download.ini" "Field 1" "Text" "Setup will use the setup files located in the following folder. To use a different folder, click Browse and select another folder. Click Next to continue."
+    !insertmacro MUI_INSTALLOPTIONS_WRITE "download.ini" "Field 4" "Type" ""
+    !insertmacro MUI_INSTALLOPTIONS_WRITE "download.ini" "Field 4" "State" "0"
+    !insertmacro MUI_INSTALLOPTIONS_WRITE "download.ini" "Field 5" "Type" ""
+    !insertmacro MUI_INSTALLOPTIONS_WRITE "download.ini" "Field 5" "State" "0"
   ${Else}
-    !insertmacro MUI_HEADER_TEXT "Distribution Files" "Select where you want the distribution files to be downloaded."
+    !insertmacro MUI_HEADER_TEXT "Setup Files" "Select the download location for the setup files."
   ${EndIf}
-  !insertmacro MUI_INSTALLOPTIONS_WRITE "distfilefolder.ini" "Field 3" "State" ${DISTFILES_PATH}
-  !insertmacro MUI_INSTALLOPTIONS_DISPLAY "distfilefolder.ini"
-
-FunctionEnd
-
-Function MIRRORSELECT
+  !insertmacro MUI_INSTALLOPTIONS_WRITE "download.ini" "Field 3" "State" ${DISTFILES_PATH}
 
   # Only display mirror selection if the installer is in online mode
   ${Unless} $OFFLINE == 1
-    !insertmacro MUI_INSTALLOPTIONS_EXTRACT "mirrorselect.ini"
-    !insertmacro MUI_HEADER_TEXT "Mirror Selection" "Select a mirror from your part of the world."
-
     # Fix the mirrors for the Preferences page
     StrCpy $0 1
     StrCpy $2 "Randomly selected mirror (Recommended)"
@@ -764,23 +773,29 @@ Function MIRRORSELECT
       StrCpy $2 $2 "" 1
     ${EndIf}
 
-    !insertmacro MUI_INSTALLOPTIONS_WRITE "mirrorselect.ini" "Field 3" "ListItems" $2
-    !insertmacro MUI_INSTALLOPTIONS_DISPLAY "mirrorselect.ini"
+    !insertmacro MUI_INSTALLOPTIONS_WRITE "download.ini" "Field 7" "ListItems" $2
   ${EndUnless}
+
+  !insertmacro MUI_INSTALLOPTIONS_DISPLAY "download.ini"
 
 FunctionEnd
 
-#TEXTURESFunction TEXTURES
+Function ADDONS
 
-#TEXTURES  !insertmacro MUI_INSTALLOPTIONS_EXTRACT "textures.ini"
-#TEXTURES  # Get texture size and add it to radio button description
-#TEXTURES  ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-textures.zip"
-#TEXTURES  IntOp $0 $0 / 1024
-#TEXTURES  !insertmacro MUI_INSTALLOPTIONS_WRITE "textures.ini" "Field 5" "Text" "$0 mb"
-#TEXTURES  !insertmacro MUI_HEADER_TEXT "High resolution textures" "Select whether or not to download high resolution textures."
-#TEXTURES  !insertmacro MUI_INSTALLOPTIONS_DISPLAY "textures.ini"
+  !insertmacro MUI_INSTALLOPTIONS_EXTRACT "addons.ini"
+  !insertmacro MUI_HEADER_TEXT "Addons" "Choose what modifications and addons to install"
+  !insertmacro DetermineSectionSize nquake2-addon-ctf.zip
+  IntOp $1 $SIZE / 1000
+  !insertmacro MUI_INSTALLOPTIONS_WRITE "addons.ini" "Field 3" "Text" "Capture The Flag ($1 MB)"
+  !insertmacro DetermineSectionSize nquake2-addon-eraser.zip
+  IntOp $1 $SIZE / 1000
+  !insertmacro MUI_INSTALLOPTIONS_WRITE "addons.ini" "Field 4" "Text" "Eraser Bot ($1 MB)"
+  !insertmacro DetermineSectionSize nquake2-addon-textures.zip
+  IntOp $1 $SIZE / 1000
+  !insertmacro MUI_INSTALLOPTIONS_WRITE "addons.ini" "Field 6" "Text" "High resolution textures ($1 MB)"
+  !insertmacro MUI_INSTALLOPTIONS_DISPLAY "addons.ini"
 
-#TEXTURESFunctionEnd
+FunctionEnd
 
 Function CONFIG
 
@@ -893,6 +908,52 @@ Function FinishShow
 FunctionEnd
 
 ;----------------------------------------------------
+;Download size manipulation
+
+!define SetSize "Call SetSize"
+
+Function SetSize
+  !insertmacro MUI_INSTALLOPTIONS_READ $ADDON_CTF "addons.ini" "Field 3" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $ADDON_ERASER "addons.ini" "Field 4" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $ADDON_TEXTURES "addons.ini" "Field 6" "State"
+  # Skip demo if pak0.pak can be found
+  ${Unless} ${FileExists} "$INSTDIR\baseq2\pak0.pak"
+    ${If} ${FileExists} "$EXEDIR\pak0.pak"
+      ${GetSize} $EXEDIR "/M=pak0.pak /S=0B /G=0" $7 $8 $9
+      ${If} $7 == "183997730"
+        Goto SkipDemo
+      ${EndIf}
+    ${EndIf}
+  ${EndUnless}
+  !insertmacro DetermineSectionSize q2-314-demo-x86.zip
+  IntOp $1 0 + $SIZE
+  SkipDemo:
+  !insertmacro DetermineSectionSize q2-3.20-x86-full_3.zip
+  IntOp $1 $1 + $SIZE
+  !insertmacro DetermineSectionSize nquake2-gpl.zip
+  IntOp $1 $1 + $SIZE
+  !insertmacro DetermineSectionSize nquake2-non-gpl.zip
+  IntOp $1 $1 + $SIZE
+  ${If} $ADDON_CTF == 1
+    !insertmacro DetermineSectionSize nquake2-addon-ctf.zip
+    IntOp $1 $1 + $SIZE
+  ${EndIf}
+  ${If} $ADDON_ERASER == 1
+    !insertmacro DetermineSectionSize nquake2-addon-eraser.zip
+    IntOp $1 $1 + $SIZE
+  ${EndIf}
+  ${If} $ADDON_TEXTURES == 1
+    !insertmacro DetermineSectionSize nquake2-addon-textures.zip
+    IntOp $1 $1 + $SIZE
+  ${EndIf}
+FunctionEnd
+
+Function DirectoryPageShow
+  ${SetSize}
+  SectionSetSize ${NQUAKE2} $1
+FunctionEnd 
+
+;----------------------------------------------------
 ;Functions
 
 Function .onInit
@@ -902,7 +963,7 @@ Function .onInit
 
   # Download nquake2.ini
   Start:
-  inetc::get /NOUNLOAD /CAPTION "Initializing..." /BANNER "nQuake2 is initializing, please wait..." /TIMEOUT 5000 "${NQUAKE2_URL}/nquake2.ini" $NQUAKE2_INI /END
+  inetc::get /NOUNLOAD /CAPTION "Initializing..." /BANNER "nQuake2 is initializing, please wait..." /TIMEOUT 5000 "${INSTALLER_URL}/nquake2.ini" $NQUAKE2_INI /END
   Pop $0
   ${Unless} $0 == "OK"
     ${If} $0 == "Cancelled"

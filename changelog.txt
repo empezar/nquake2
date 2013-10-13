@@ -1,0 +1,17 @@
+2013-10-11 - nQuake2 v1.2
+
+* Added addon support.
+* Broke CTF and Eraser Bot free from the base package and turned them into addons.
+* Added high resolution textures addon.
+* Merged the distribution files page with the mirror select page.
+* Fixed the bug where the download size would not be properly calculated.
+
+2013-09-14 - nQuake2 v1.1
+
+* Added dropdown menus for movement binds in configuration window.
+* Player name now defaults to the current user in the configuration window.
+* Full game data (pak0.pak) is now detected and installed when placed alongside the installer.
+
+2013-01-08 - nQuake2 v1.0
+
+* Initial release.
