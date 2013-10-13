@@ -1,3 +1,12 @@
+2013-10-12 - nQuake2 v1.3 for Windows
+
+* Setup now also looks for setup files in the installer folder.
+* Fixed the bug where the installation folder would sometimes not get removed.
+* Fixed the bug where the setup files folder would get removed even if it wasn't empty. (This could cause pretty much damage if the files were downloaded to e.g. D:\.)
+* Fixed the bug where Quake 2 point release v3.20 would not get downloaded if the full version pak0.pak had been located.
+* Fixed the bug where setup would create q2config.cfgs for Eraser Bot and Capture The Flag even if they were not installed.
+* Minor bug fixes and code improvement.
+
 2013-10-11 - nQuake2 v1.2
 
 * Added addon support.

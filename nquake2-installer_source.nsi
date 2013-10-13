@@ -1,8 +1,8 @@
 ;nQuake2 NSIS Online Installer Script
-;By Empezar 2012-12-09; Last modified 2013-10-11
+;By Empezar 2012-12-09; Last modified 2013-10-13
 
-!define VERSION "1.2"
-!define SHORTVERSION "12"
+!define VERSION "1.3"
+!define SHORTVERSION "13"
 
 Name "nQuake2"
 OutFile "nquake2v${SHORTVERSION}_installer.exe"
@@ -23,6 +23,7 @@ InstallDirRegKey HKCU "Software\nQuake2" "Install_Dir"
 !include "FileFunc.nsh"
 !insertmacro GetSize
 !insertmacro GetTime
+!include "StrStrip.nsh"
 !include "LogicLib.nsh"
 !include "Time.nsh"
 !include "Locate.nsh"
@@ -57,7 +58,6 @@ Var DISTLOGTMP
 Var ERRLOG
 Var ERRLOGTMP
 Var ERRORS
-Var FULLVERSION
 Var INSTALLED
 Var INSTLOG
 Var INSTLOGTMP
@@ -102,7 +102,6 @@ Page custom CONFIG
 
 Page custom ADDONS
 
-!define MUI_PAGE_CUSTOMFUNCTION_PRE UpdateInstallSize
 DirText "Setup will install nQuake2 in the following folder. To install in a different folder, click Browse and select another folder. Click Next to continue.$\r$\n$\r$\nIt is NOT ADVISABLE to install in the Program Files folder." "Destination Folder" "Browse" "Select the folder to install nQuake2 in:"
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW DirectoryPageShow
 !insertmacro MUI_PAGE_DIRECTORY
@@ -187,10 +186,11 @@ Section "" # Prepare installation
   ${EndUnless}
 
   # Calculate the installation size
+  IntOp $INSTSIZE 0 + 0
   ${Unless} ${FileExists} "$INSTDIR\baseq2\pak0.pak"
     # Add demo zip size if pak0.pak can't be found in installer directory
-    ${If} ${FileExists} "$EXEDIR\pak0.pak"
-      ${GetSize} $EXEDIR "/M=pak0.pak /S=0B /G=0" $7 $8 $9
+    ${If} ${FileExists} "$PAK_LOCATION"
+      ${GetSize} $PAK_LOCATION "/M=pak0.pak /S=0B /G=0" $7 $8 $9
       ${If} $7 != "183997730"
         ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "q2-314-demo-x86.zip"
         IntOp $INSTSIZE $INSTSIZE + $0
@@ -201,7 +201,18 @@ Section "" # Prepare installation
   IntOp $INSTSIZE $INSTSIZE + $0
   ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-non-gpl.zip"
   IntOp $INSTSIZE $INSTSIZE + $0
-  ###
+  ${If} $ADDON_CTF == 1
+    ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-ctf.zip"
+    IntOp $INSTSIZE $INSTSIZE + $0
+  ${EndIf}
+  ${If} $ADDON_ERASER == 1
+    ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-eraser.zip"
+    IntOp $INSTSIZE $INSTSIZE + $0
+  ${EndIf}
+  ${If} $ADDON_TEXTURES == 1
+    ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "nquake2-textures.zip"
+    IntOp $INSTSIZE $INSTSIZE + $0
+  ${EndIf}
 
   # Find out what mirror was selected
   !insertmacro MUI_INSTALLOPTIONS_READ $R0 "download.ini" "Field 7" "State"
@@ -261,22 +272,22 @@ Section "nQuake2" NQUAKE2
   # Copy pak0.pak if it was found or specified (registered data), and doesn't already exist
   CreateDirectory "$INSTDIR\baseq2"
   ${If} ${FileExists} $PAK_LOCATION
-  ${AndUnless} ${FileExists} "$INSTDIR\baseq2\pak0.pak"
-    # Copy pak1.pak
-    CopyFiles /SILENT $PAK_LOCATION "$INSTDIR\baseq2\pak0.pak"
+    Goto Skipdemo
   ${Else}
-    # Download and install pak0.pak (demo data)
-    !insertmacro InstallSection q2-314-demo-x86.zip "Quake 2 v3.14 demo"
-    # Move pak0.pak from demo folder
-    Rename "$INSTDIR\Install\Data\baseq2\pak0.pak" "$INSTDIR\baseq2\pak0.pak"
-    # Remove crap files extracted from demo zip
-    RMDir /R "$INSTDIR\Install"
-    RMDir /R "$INSTDIR\Splash"
-    Delete /REBOOTOK "$INSTDIR\license.txt"
-    Delete /REBOOTOK "$INSTDIR\Setup.exe"
-    Delete /REBOOTOK "$INSTDIR\readme.txt"
-    Delete /REBOOTOK "$INSTDIR\ref_gl.dll"
-    Delete /REBOOTOK "$INSTDIR\ref_soft.dll"
+    ${Unless} ${FileExists} "$INSTDIR\baseq2\pak0.pak"
+      # Download and install pak0.pak (demo data)
+      !insertmacro InstallSection q2-314-demo-x86.zip "Quake 2 v3.14 demo"
+      # Move pak0.pak from demo folder
+      Rename "$INSTDIR\Install\Data\baseq2\pak0.pak" "$INSTDIR\baseq2\pak0.pak"
+      # Remove crap files extracted from demo zip
+      RMDir /R "$INSTDIR\Install"
+      RMDir /R "$INSTDIR\Splash"
+      Delete /REBOOTOK "$INSTDIR\license.txt"
+      Delete /REBOOTOK "$INSTDIR\Setup.exe"
+      Delete /REBOOTOK "$INSTDIR\readme.txt"
+      Delete /REBOOTOK "$INSTDIR\ref_gl.dll"
+      Delete /REBOOTOK "$INSTDIR\ref_soft.dll"
+    ${EndUnless}
   ${EndIf}
   # Add to installed size
   ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "q2-314-demo-x86.zip"
@@ -287,16 +298,9 @@ Section "nQuake2" NQUAKE2
   RealProgress::SetProgress /NOUNLOAD $0
   # Add pak0.pak to install.log
   FileWrite $INSTLOG "baseq2\pak0.pak$\r$\n"
+  Skipdemo:
 
   # Download and install Quake 2 v3.20 point release
-  # but only if pak0.pak can't be found in installer directory
-  ${If} ${FileExists} "$EXEDIR\pak0.pak"
-    ${GetSize} $EXEDIR "/M=pak0.pak /S=0B /G=0" $7 $8 $9
-    ${If} $7 == "183997730"
-      CopyFiles "$EXEDIR\pak0.pak" "$INSTDIR\baseq2\pak0.pak"
-      Goto Skipdemo
-    ${EndIf}
-  ${EndIf}
   !insertmacro InstallSection q2-3.20-x86-full_3.zip "Quake 2 v3.20 point release"
   # Add to installed size
   ReadINIStr $0 $NQUAKE2_INI "distfile_sizes" "q2-3.20-x86-full_3.zip"
@@ -314,7 +318,6 @@ Section "nQuake2" NQUAKE2
   Delete /REBOOTOK "$INSTDIR\quake2.exe"
   Delete /REBOOTOK "$INSTDIR\ref_soft.dll"
   Delete /REBOOTOK "$INSTDIR\ref_gl.dll"
-  Skipdemo:
 
   # Backup old configs if such exist
   ${If} ${FileExists} "$INSTDIR\baseq2\config.cfg"
@@ -389,11 +392,22 @@ Section "nQuake2" NQUAKE2
   ${EndIf}
 
   # Copy pak0.pak if it can be found alongside the installer executable
+  ${StrStrip} "pak0.pak" $PAK_LOCATION $R1
   ${If} ${FileExists} "$EXEDIR\pak0.pak"
-    ${GetSize} $EXEDIR "/M=pak0.pak /S=0B /G=0" $7 $8 $9
-    ${If} $7 == "183997730"
-      CopyFiles "$EXEDIR\pak0.pak" "$INSTDIR\baseq2\pak0.pak"
+    StrCpy $R0 "$EXEDIR"
+  ${ElseIf} ${FileExists} "$DISTFILES_PATH\pak0.pak"
+    StrCpy $R0 "$DISTFILES_PATH"
+  ${ElseIf} ${FileExists} "$PAK_LOCATION"
+    StrCpy $R0 "$R1" # Pak location without pak0.pak, see above
+  ${EndIf}
+  ${GetSize} "$R0" "/M=pak0.pak /S=0B /G=0" $7 $8 $9
+  ${If} $7 == "183997730"
+    CopyFiles "$R0\pak0.pak" "$INSTDIR\baseq2\pak0.pak"
+    ${If} $DISTFILES_DELETE == 0
+    ${AndIf} $R0 != $DISTFILES_PATH
+      CopyFiles "$R0\pak0.pak" "$DISTFILES_PATH\pak0.pak"
     ${EndIf}
+    FileWrite $INSTLOG "baseq2\pak0.pak$\r$\n"
   ${EndIf}
 
 SectionEnd
@@ -428,12 +442,6 @@ SectionEnd
 
 Section "" # Clean up installation
 
-  # Close open temporary files
-  FileClose $INSTLOG
-  FileClose $ERRLOG
-  FileClose $DISTLOG
-  FileClose $CONFIGCFG
-
   # Write config.cfgs for each mod
   FileOpen $CONFIGCFG "$INSTDIR\baseq2\q2config.cfg" w
     # Write config to baseq2/postexec.cfg
@@ -455,18 +463,36 @@ Section "" # Clean up installation
     FileWrite $CONFIGCFG "bind $CONFIG_DUCK $\"+movedown$\"$\r$\n"
   FileClose $CONFIGCFG
   CopyFiles "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\action\q2config.cfg"
-  CopyFiles "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\ctf\q2config.cfg"
-  CopyFiles "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\eraser\q2config.cfg"
+  ${If} $ADDON_CTF == 1
+    CopyFiles "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\ctf\q2config.cfg"
+  ${EndIf}
+  ${If} $ADDON_ERASER == 1
+    CopyFiles "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\eraser\q2config.cfg"
+  ${EndIf}
+  # Add q2configs to install.log
+  FileWrite $INSTLOG "baseq2\q2config.cfg$\r$\n"
+  FileWrite $INSTLOG "action\q2config.cfg$\r$\n"
+  FileWrite $INSTLOG "base12\q2config.cfg$\r$\n"
+  FileWrite $INSTLOG "ctf\q2config.cfg$\r$\n"
+  FileWrite $INSTLOG "eraser\q2config.cfg$\r$\n"
+
+  # Close open temporary files
+  FileClose $INSTLOG
+  FileClose $ERRLOG
+  FileClose $DISTLOG
+  FileClose $CONFIGCFG
 
   # Write install.log
   FileOpen $INSTLOG "$INSTDIR\install.log" w
     ${time::GetFileTime} "$INSTDIR\install.log" $0 $1 $2
     FileWrite $INSTLOG "Install date: $1$\r$\n"
     FileOpen $R0 $INSTLOGTMP r
-      ClearErrors
       ${DoUntil} ${Errors}
         FileRead $R0 $0
-        FileWrite $INSTLOG $0
+        StrCpy $0 $0 -2
+        ${If} ${FileExists} "$INSTDIR\$0"
+          FileWrite $INSTLOG "$0$\r$\n"
+        ${EndIf}
       ${LoopUntil} ${Errors}
     FileClose $R0
   FileClose $INSTLOG
@@ -482,7 +508,8 @@ Section "" # Clean up installation
         ${EndIf}
       ${LoopUntil} ${Errors}
     FileClose $DISTLOG
-    RMDir /REBOOTOK $DISTFILES_PATH
+    # Remove directory if empty
+    !insertmacro RemoveFolderIfEmpty $DISTFILES_PATH
   # Copy nquake2.ini to the distfiles directory if "update distfiles" and "keep distfiles" was set
   ${ElseIf} $DISTFILES_UPDATE == 1
     FlushINI $NQUAKE2_INI
@@ -569,7 +596,8 @@ Section "Uninstall"
     Delete /REBOOTOK "$INSTDIR\uninstall.exe"
     ${locate::RMDirEmpty} $INSTDIR /M=*.* $0
     DetailPrint "Removed $0 empty directories"
-    RMDir /REBOOTOK $INSTDIR
+    # Remove directory if empty
+    !insertmacro RemoveFolderIfEmpty $INSTDIR
   ${Else}
     # Ask the user if he is sure about removing all the files contained within the nQuake2 directory
     MessageBox MB_YESNO|MB_ICONEXCLAMATION "This will remove all files contained within the nQuake2 directory.$\r$\n$\r$\nAre you sure?" IDNO AbortUninst
@@ -577,19 +605,7 @@ Section "Uninstall"
     RealProgress::SetProgress /NOUNLOAD 100
   ${EndIf}
 
-  # Remove start menu items
-  Delete /REBOOTOK "$SMPROGRAMS\$STARTMENU_FOLDER\Links\Latest News.url"
-  Delete /REBOOTOK "$SMPROGRAMS\$STARTMENU_FOLDER\Links\Message Board.url"
-  Delete /REBOOTOK "$SMPROGRAMS\$STARTMENU_FOLDER\Links\List of Servers.url"
-  Delete /REBOOTOK "$SMPROGRAMS\$STARTMENU_FOLDER\Quake 2.lnk"
-  Delete /REBOOTOK "$SMPROGRAMS\$STARTMENU_FOLDER\Eraser CTF.lnk"
-  Delete /REBOOTOK "$SMPROGRAMS\$STARTMENU_FOLDER\Eraser DM.lnk"
-  Delete /REBOOTOK "$SMPROGRAMS\$STARTMENU_FOLDER\Readme.lnk"
-  Delete /REBOOTOK "$SMPROGRAMS\$STARTMENU_FOLDER\Uninstall nQuake2.lnk"
-  RMDir /REBOOTOK "$SMPROGRAMS\$STARTMENU_FOLDER\Links"
-  RMDir /REBOOTOK "$SMPROGRAMS\$STARTMENU_FOLDER"
-
-  # Remove registry entries
+  # Remove start menu items and registry entries if they belong to this nQuake
   ReadRegStr $R0 HKCU "Software\nQuake2" "Install_Dir"
   ${If} $R0 == $INSTDIR
     # Remove start menu items
@@ -600,6 +616,8 @@ Section "Uninstall"
     DeleteRegKey HKCU "Software\nQuake2"
     DeleteRegKey HKCU "Software\r1ch.net\Quake II Server Browser"
     DeleteRegKey HKCU "Software\r1ch.net"
+    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\nQuake2"
+    DeleteRegKey HKCU "Software\nQuake"
   ${EndIf}
 
   Goto FinishUninst
@@ -615,14 +633,19 @@ SectionEnd
 
 Function FULLVERSION
 
-
   # Copy pak0.pak if it can be found alongside the installer executable
-  ${If} ${FileExists} "$EXEDIR\pak0.pak"
-    ${GetSize} $EXEDIR "/M=pak0.pak /S=0B /G=0" $7 $8 $9
-    ${If} $7 == "183997730"
-      !insertmacro MUI_INSTALLOPTIONS_WRITE "fullversion.ini" "Field 3" "State" "$EXEDIR\pak0.pak"
-      Goto SkipFullVersion
-    ${EndIf}
+  ${If} ${FileExists} "$LOCALAPPDATA\nQuake2\pak0.pak"
+    StrCpy $R0 "$LOCALAPPDATA\nQuake2"
+  ${ElseIf} ${FileExists} "$EXEDIR\pak0.pak"
+    StrCpy $R0 "$EXEDIR"
+  ${ElseIf} ${FileExists} "C:\nQuake2\baseq2\pak0.pak"
+    StrCpy $R0 "C:\nQuake2\baseq2"
+  ${EndIf}
+  ${GetSize} $R0 "/M=pak0.pak /S=0B /G=0" $7 $8 $9
+  ${If} $7 == "183997730"
+    !insertmacro MUI_INSTALLOPTIONS_WRITE "fullversion.ini" "Field 3" "State" "$R0\pak0.pak"
+    StrCpy $PAK_LOCATION "$R0\pak0.pak"
+    Goto SkipFullVersion
   ${EndIf}
 
   !insertmacro MUI_INSTALLOPTIONS_EXTRACT "fullversion.ini"
@@ -635,7 +658,7 @@ Function FULLVERSION
     !insertmacro ValidatePak $0
   ${EndIf}
 
-  # Look for pak1.pak in 28 likely locations
+  # Look for pak0.pak in 28 likely locations
   ${If} ${FileExists} "C:\Quake2\baseq2\pak0.pak"
     StrCpy $0 "C:\Quake2\baseq2"
     !insertmacro ValidatePak $0
@@ -724,9 +747,8 @@ Function FULLVERSION
   ${EndIf}
 
   FullVersion:
-  !insertmacro MUI_INSTALLOPTIONS_WRITE "fullversion.ini" "Field 1" "Text" "The full version of Quake is not included in this package. However, setup has found what resembles the full version pak0.pak on your harddrive. If this is not the correct file, click Browse to locate the correct pak0.pak. Click Next to continue."
+  !insertmacro MUI_INSTALLOPTIONS_WRITE "fullversion.ini" "Field 1" "Text" "The full version of Quake 2 is not included in this package. However, setup has found what resembles the full version pak0.pak on your harddrive. If this is not the correct file, click Browse to locate the correct pak0.pak. Click Next to continue."
   !insertmacro MUI_INSTALLOPTIONS_WRITE "fullversion.ini" "Field 3" "State" "$0\pak0.pak"
-  StrCpy $FULLVERSION 1
   FullVersionEnd:
   # Remove the purchase link if the installer is in offline mode
   ${If} $OFFLINE == 1
@@ -870,30 +892,6 @@ Function WelcomeShow
   ${EndUnless}
 FunctionEnd
 
-Function UpdateInstallSize
-  !insertmacro MUI_INSTALLOPTIONS_READ $PAK_LOCATION "fullversion.ini" "Field 3" "State"
-  # This function updates install size depending on whether or not the full Quake 2 pak0.pak was found
-  ${GetParent} $PAK_LOCATION $0
-  ${GetSize} $0 "/M=pak0.pak /S=0B /G=0" $7 $8 $9
-  ${Unless} $FULLVERSION == 1
-  ${AndUnless} $7 == "183997730"
-    !insertmacro DetermineSectionSize q2-314-demo-x86.zip
-    IntOp $1 0 + $SIZE
-  ${EndUnless}
-  !insertmacro DetermineSectionSize q2-3.20-x86-full_3.zip
-  IntOp $1 $1 + $SIZE
-  !insertmacro DetermineSectionSize nquake2-gpl.zip
-  IntOp $1 $1 + $SIZE
-  !insertmacro DetermineSectionSize nquake2-non-gpl.zip
-  IntOp $1 $1 + $SIZE
-#TEXTURES  !insertmacro MUI_INSTALLOPTIONS_READ $TEXTURES "textures.ini" "Field 2" "State"
-#TEXTURES  ${If} $TEXTURES == 1
-#TEXTURES    !insertmacro DetermineSectionSize nquake2-textures.zip
-#TEXTURES    IntOp $1 $1 + $SIZE
-#TEXTURES  ${EndIf}
-  SectionSetSize ${NQUAKE2} $1
-FunctionEnd
-
 Function FinishShow
   # Hide the Back button on the finish page if there were no errors
   ${Unless} $ERRORS > 0
@@ -916,13 +914,21 @@ Function SetSize
   !insertmacro MUI_INSTALLOPTIONS_READ $ADDON_CTF "addons.ini" "Field 3" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $ADDON_ERASER "addons.ini" "Field 4" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $ADDON_TEXTURES "addons.ini" "Field 6" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $PAK_LOCATION "fullversion.ini" "Field 3" "State"
   # Skip demo if pak0.pak can be found
-  ${Unless} ${FileExists} "$INSTDIR\baseq2\pak0.pak"
+  ${StrStrip} "pak0.pak" $PAK_LOCATION $R1
+  ${Unless} ${FileExists} "C:\nQuake2\baseq2\pak0.pak"
     ${If} ${FileExists} "$EXEDIR\pak0.pak"
-      ${GetSize} $EXEDIR "/M=pak0.pak /S=0B /G=0" $7 $8 $9
-      ${If} $7 == "183997730"
-        Goto SkipDemo
-      ${EndIf}
+      StrCpy $R0 "$EXEDIR"
+    ${ElseIf}  ${FileExists} "$DISTFILES_FOLDER\pak0.pak"
+      StrCpy $R0 "$DISTFILES_FOLDER"
+    ${ElseIf}  ${FileExists} "$PAK_LOCATION"
+      StrCpy $R0 "$R1" # Pak location without pak0.pak, see above
+    ${EndIf}
+    ${GetSize} $R0 "/M=pak0.pak /S=0B /G=0" $7 $8 $9
+    ${If} $7 == "183997730"
+      !insertmacro MUI_INSTALLOPTIONS_WRITE "fullversion.ini" "Field 3" "State" "$R0\pak0.pak"
+      Goto SkipDemo
     ${EndIf}
   ${EndUnless}
   !insertmacro DetermineSectionSize q2-314-demo-x86.zip
@@ -1076,7 +1082,8 @@ Function .abortInstallation
   Delete /REBOOTOK "$INSTDIR\install.log"
   ${locate::RMDirEmpty} $INSTDIR /M=*.* $0
   DetailPrint "Removed $0 empty directories"
-  RMDir /REBOOTOK $INSTDIR
+  # Remove directory if empty
+  !insertmacro RemoveFolderIfEmpty $INSTDIR
   Goto InstEnd
   SkipInstRemoval:
   Delete /REBOOTOK "$INSTDIR\install.log"
@@ -1104,7 +1111,8 @@ Function .abortInstallation
       IntOp $5 $5 + 1
     ${LoopUntil} ${Errors}
   FileClose $R0
-  RMDir /REBOOTOK $DISTFILES_PATH
+  # Remove directory if empty
+  !insertmacro RemoveFolderIfEmpty $DISTFILES_PATH
   DistEnd:
 
   # Set progress bar to 100%
@@ -1167,7 +1175,10 @@ Function .installSection
   Pop $R1 # distfile info
   Pop $R0 # distfile filename
   Call .checkDistfileDate
-  ${If} ${FileExists} "$DISTFILES_PATH\$R0"
+  ${If} ${FileExists} "$EXEDIR\$R0"
+    DetailPrint "Extracting $R1, please wait..."
+    nsisunz::UnzipToStack "$DISTFILES_PATH\$R0" $INSTDIR
+  ${ElseIf} ${FileExists} "$DISTFILES_PATH\$R0"
   ${OrIf} $OFFLINE == 1
     ${If} $DISTFILES_UPDATE == 0
     ${OrIf} $R2 == 0
