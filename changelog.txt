@@ -1,4 +1,9 @@
-2013-10-12 - nQuake2 v1.3 for Windows
+2013-??-?? - nQuake2 v1.4 for Windows
+
+* Setup now checks if pak0.pak exists at copy destination before copying it.
+* Fixed the bug where file copies (pak0.pak/pak1.pak) were displayed (Explorer copy files) during setup.
+
+2013-10-13 - nQuake2 v1.3 for Windows
 
 * Setup now also looks for setup files in the installer folder.
 * Fixed the bug where the installation folder would sometimes not get removed.

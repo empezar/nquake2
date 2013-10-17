@@ -1,8 +1,8 @@
 ;nQuake2 NSIS Online Installer Script
-;By Empezar 2012-12-09; Last modified 2013-10-13
+;By Empezar 2012-12-09; Last modified 2013-10-17
 
-!define VERSION "1.3"
-!define SHORTVERSION "13"
+!define VERSION "1.4"
+!define SHORTVERSION "14"
 
 Name "nQuake2"
 OutFile "nquake2v${SHORTVERSION}_installer.exe"
@@ -374,7 +374,7 @@ Section "nQuake2" NQUAKE2
     IntOp $0 $0 / $INSTSIZE
     RealProgress::SetProgress /NOUNLOAD $0
     # Copy CTF pak0.pak to Eraser folder
-    CopyFiles "$INSTDIR\ctf\pak0.pak" "$INSTDIR\eraser\ctf.pak"
+    CopyFiles /SILENT "$INSTDIR\ctf\pak0.pak" "$INSTDIR\eraser\ctf.pak"
     # Add CTF pak0.pak to install.log
     FileWrite $INSTLOG "eraser\ctf.pak$\r$\n"
   ${EndIf}
@@ -402,10 +402,14 @@ Section "nQuake2" NQUAKE2
   ${EndIf}
   ${GetSize} "$R0" "/M=pak0.pak /S=0B /G=0" $7 $8 $9
   ${If} $7 == "183997730"
-    CopyFiles "$R0\pak0.pak" "$INSTDIR\baseq2\pak0.pak"
+    ${Unless} ${FileExists} "$INSTDIR\baseq2\pak0.pak"
+      CopyFiles /SILENT "$R0\pak0.pak" "$INSTDIR\baseq2\pak0.pak"
+    ${EndUnless}
     ${If} $DISTFILES_DELETE == 0
     ${AndIf} $R0 != $DISTFILES_PATH
-      CopyFiles "$R0\pak0.pak" "$DISTFILES_PATH\pak0.pak"
+      ${Unless} ${FileExists} "$DISTFILES_PATH\pak0.pak"
+        CopyFiles /SILENT "$R0\pak0.pak" "$DISTFILES_PATH\pak0.pak"
+      ${EndUnless}
     ${EndIf}
     FileWrite $INSTLOG "baseq2\pak0.pak$\r$\n"
   ${EndIf}
@@ -462,12 +466,12 @@ Section "" # Clean up installation
     FileWrite $CONFIGCFG "bind $CONFIG_JUMP $\"+moveup$\"$\r$\n"
     FileWrite $CONFIGCFG "bind $CONFIG_DUCK $\"+movedown$\"$\r$\n"
   FileClose $CONFIGCFG
-  CopyFiles "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\action\q2config.cfg"
+  CopyFiles /SILENT "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\action\q2config.cfg"
   ${If} $ADDON_CTF == 1
-    CopyFiles "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\ctf\q2config.cfg"
+    CopyFiles /SILENT "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\ctf\q2config.cfg"
   ${EndIf}
   ${If} $ADDON_ERASER == 1
-    CopyFiles "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\eraser\q2config.cfg"
+    CopyFiles /SILENT "$INSTDIR\baseq2\q2config.cfg" "$INSTDIR\eraser\q2config.cfg"
   ${EndIf}
   # Add q2configs to install.log
   FileWrite $INSTLOG "baseq2\q2config.cfg$\r$\n"
@@ -480,13 +484,13 @@ Section "" # Clean up installation
   FileClose $INSTLOG
   FileClose $ERRLOG
   FileClose $DISTLOG
-  FileClose $CONFIGCFG
 
   # Write install.log
   FileOpen $INSTLOG "$INSTDIR\install.log" w
     ${time::GetFileTime} "$INSTDIR\install.log" $0 $1 $2
     FileWrite $INSTLOG "Install date: $1$\r$\n"
     FileOpen $R0 $INSTLOGTMP r
+      ClearErrors
       ${DoUntil} ${Errors}
         FileRead $R0 $0
         StrCpy $0 $0 -2
@@ -513,7 +517,7 @@ Section "" # Clean up installation
   # Copy nquake2.ini to the distfiles directory if "update distfiles" and "keep distfiles" was set
   ${ElseIf} $DISTFILES_UPDATE == 1
     FlushINI $NQUAKE2_INI
-    CopyFiles $NQUAKE2_INI "$DISTFILES_PATH\nquake2.ini"
+    CopyFiles /SILENT $NQUAKE2_INI "$DISTFILES_PATH\nquake2.ini"
   ${EndIf}
 
   # Write to registry
