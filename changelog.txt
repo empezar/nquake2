@@ -1,4 +1,9 @@
-2013-??-?? - nQuake2 v1.4 for Windows
+2014-03-16 - nQuake2 v1.5 for Windows
+
+* Added option to re-download setup files during installation.
+* Added option to remove setup files during uninstallation.
+
+2014-02-16 - nQuake2 v1.4 for Windows
 
 * Setup now checks if pak0.pak exists at copy destination before copying it.
 * Fixed the bug where file copies (pak0.pak/pak1.pak) were displayed (Explorer copy files) during setup.
