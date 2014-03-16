@@ -1,8 +1,8 @@
 ;nQuake2 NSIS Online Installer Script
-;By Empezar 2012-12-09; Last modified 2013-10-17
+;By Empezar 2012-12-09; Last modified 2014-03-16
 
-!define VERSION "1.4"
-!define SHORTVERSION "14"
+!define VERSION "1.5"
+!define SHORTVERSION "15"
 
 Name "nQuake2"
 OutFile "nquake2v${SHORTVERSION}_installer.exe"
@@ -15,6 +15,7 @@ InstallDir "C:\nQuake2"
 ;---------------------------------------------------
 
 InstallDirRegKey HKCU "Software\nQuake2" "Install_Dir"
+InstallDirRegKey HKCU "Software\nQuake2" "Setup_Dir"
 
 ;----------------------------------------------------
 ;Header Files
@@ -50,6 +51,7 @@ Var CONFIG_DUCK
 Var CONFIGCFG
 Var DISTFILES_DELETE
 Var DISTFILES_PATH
+Var DISTFILES_REDOWNLOAD
 Var DISTFILES_UPDATE
 Var DISTFILES_URL
 Var DISTFILES
@@ -67,6 +69,7 @@ Var PAK_LOCATION
 Var OFFLINE
 Var REMOVE_ALL_FILES
 Var REMOVE_MODIFIED_FILES
+Var REMOVE_SETUP_FILES
 Var RETRIES
 Var SIZE
 Var STARTMENU_FOLDER
@@ -166,7 +169,8 @@ Section "" # Prepare installation
   # Read information from custom pages
   !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_PATH "download.ini" "Field 3" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_UPDATE "download.ini" "Field 4" "State"
-  !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_DELETE "download.ini" "Field 5" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_REDOWNLOAD "download.ini" "Field 5" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $DISTFILES_DELETE "download.ini" "Field 6" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $PAK_LOCATION "fullversion.ini" "Field 3" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $CONFIG_NAME "config.ini" "Field 4" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $CONFIG_INVERT "config.ini" "Field 6" "State"
@@ -215,7 +219,7 @@ Section "" # Prepare installation
   ${EndIf}
 
   # Find out what mirror was selected
-  !insertmacro MUI_INSTALLOPTIONS_READ $R0 "download.ini" "Field 7" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $R0 "download.ini" "Field 8" "State"
   ${If} $R0 == "Randomly selected mirror (Recommended)"
     # Get amount of mirrors ($0 = amount of mirrors)
     StrCpy $0 1
@@ -522,6 +526,7 @@ Section "" # Clean up installation
 
   # Write to registry
   WriteRegStr HKCU "Software\nQuake2\" "Install_Dir" "$INSTDIR"
+  WriteRegStr HKCU "Software\nQuake2\" "Setup_Dir" "$DISTFILES_PATH"
   WriteRegStr HKCU "Software\r1ch.net\Quake II Server Browser\" "Quake II Directory" "$INSTDIR"
   WriteRegStr HKCU "Software\r1ch.net\Quake II Server Browser\" "Quake II Executable" "q2pro.exe"
   WriteRegDWORD HKCU "Software\r1ch.net\Quake II Server Browser\" "Good Ping Threshold" "40"
@@ -556,6 +561,7 @@ Section "Uninstall"
   # Read uninstall settings
   !insertmacro MUI_INSTALLOPTIONS_READ $REMOVE_MODIFIED_FILES "uninstall.ini" "Field 5" "State"
   !insertmacro MUI_INSTALLOPTIONS_READ $REMOVE_ALL_FILES "uninstall.ini" "Field 6" "State"
+  !insertmacro MUI_INSTALLOPTIONS_READ $REMOVE_SETUP_FILES "uninstall.ini" "Field 7" "State"
 
   # Set progress bar to 0%
   RealProgress::SetProgress /NOUNLOAD 0
@@ -607,6 +613,38 @@ Section "Uninstall"
     MessageBox MB_YESNO|MB_ICONEXCLAMATION "This will remove all files contained within the nQuake2 directory.$\r$\n$\r$\nAre you sure?" IDNO AbortUninst
     RMDir /r /REBOOTOK $INSTDIR
     RealProgress::SetProgress /NOUNLOAD 100
+  ${EndIf}
+
+  # Remove setup files if user checked "remove setup files"
+  ${If} $REMOVE_SETUP_FILES == 1
+    ReadRegStr $R0 HKCU "Software\nQuake2" "Setup_Dir"
+    ${If} ${FileExists} "$R0\nquake2.ini"
+      Delete /REBOOTOK "$R0\nquake2.ini"
+    ${EndIf}
+    ${If} ${FileExists} "$R0\nquake2-addon-ctf.zip"
+      Delete /REBOOTOK "$R0\nquake2-addon-ctf.zip"
+    ${EndIf}
+    ${If} ${FileExists} "$R0\nquake2-addon-eraser.zip"
+      Delete /REBOOTOK "$R0\nquake2-addon-eraser.zip"
+    ${EndIf}
+    ${If} ${FileExists} "$R0\nquake2-addon-textures.zip"
+      Delete /REBOOTOK "$R0\nquake2-addon-textures.zip"
+    ${EndIf}
+    ${If} ${FileExists} "$R0\nquake2-gpl.zip"
+      Delete /REBOOTOK "$R0\nquake2-gpl.zip"
+    ${EndIf}
+    ${If} ${FileExists} "$R0\nquake2-non-gpl.zip"
+      Delete /REBOOTOK "$R0\nquake2-non-gpl.zip"
+    ${EndIf}
+    ${If} ${FileExists} "$R0\pak0.pak"
+      Delete /REBOOTOK "$R0\pak0.pak"
+    ${EndIf}
+    ${If} ${FileExists} "$R0\q2-3.20-x86-full_3.zip"
+      Delete /REBOOTOK "$R0\q2-3.20-x86-full_3.zip"
+    ${EndIf}
+    # Remove directory if empty
+    ${locate::RMDirEmpty} $R0 /M=*.* $0
+    !insertmacro RemoveFolderIfEmpty $R0
   ${EndIf}
 
   # Remove start menu items and registry entries if they belong to this nQuake
@@ -799,7 +837,7 @@ Function DOWNLOAD
       StrCpy $2 $2 "" 1
     ${EndIf}
 
-    !insertmacro MUI_INSTALLOPTIONS_WRITE "download.ini" "Field 7" "ListItems" $2
+    !insertmacro MUI_INSTALLOPTIONS_WRITE "download.ini" "Field 8" "ListItems" $2
   ${EndUnless}
 
   !insertmacro MUI_INSTALLOPTIONS_DISPLAY "download.ini"
@@ -1137,6 +1175,7 @@ Function .checkDistfileDate
     ${EndIf}
     StrCpy $1 "$4$3$2$6$7$8"
     ${If} $1 < $0
+    ${OrIf} $DISTFILES_REDOWNLOAD == 1
       StrCpy $R2 1
     ${Else}
       ReadINIStr $1 "$DISTFILES_PATH\nquake2.ini" "distfile_dates" $R0
